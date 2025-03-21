@@ -1,6 +1,10 @@
 import streamlit as st
 import replicate
 import os
+import nltk
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+
+nltk.download('punkt')
 
 # App title
 st.set_page_config(page_title="🦙💬 Llama Newly 2 Chatbot")
@@ -43,7 +47,12 @@ def clear_chat_history():
     st.session_state.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
-# Function for generating LLaMA2 response. Refactored from https://github.com/a16z-infra/llama2-chatbot
+# Function to compute BLEU score
+def compute_bleu(reference, candidate):
+    smoothie = SmoothingFunction().method1
+    return sentence_bleu([reference], candidate, smoothing_function=smoothie)
+
+# Function for generating LLaMA2 response
 def generate_llama2_response(prompt_input):
     string_dialogue = "You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'."
     for dict_message in st.session_state.messages:
@@ -73,5 +82,13 @@ if st.session_state.messages[-1]["role"] != "assistant":
                 full_response += item
                 placeholder.markdown(full_response)
             placeholder.markdown(full_response)
+    
+    # Compute BLEU score
+    reference = nltk.word_tokenize("How may I assist you today?")  # Replace with an actual reference
+    candidate = nltk.word_tokenize(full_response)
+    bleu_score = compute_bleu(reference, candidate)
+    
+    st.write(f'**BLEU Score:** {bleu_score:.4f}')
+    
     message = {"role": "assistant", "content": full_response}
     st.session_state.messages.append(message)
