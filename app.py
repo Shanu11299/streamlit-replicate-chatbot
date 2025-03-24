@@ -4,19 +4,8 @@ import os
 import nltk
 from nltk.translate.bleu_score import sentence_bleu
 
-# Ensure NLTK data directory exists
-nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
-if not os.path.exists(nltk_data_path):
-    os.makedirs(nltk_data_path)
-
-# Set the NLTK data path
-nltk.data.path.append(nltk_data_path)
-
-# Manually check and download 'punkt' tokenizer
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt', download_dir=nltk_data_path)
+# Ensure NLTK tokenizer is available
+nltk.download('punkt')
 
 # App title
 st.set_page_config(page_title="🦙💬 Llama 2 Chatbot with BLEU Score")
@@ -62,7 +51,7 @@ st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
 # Function for generating LLaMA2 response and calculating BLEU score
 def generate_llama2_response(prompt_input):
-    string_dialogue = "You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'."
+    string_dialogue = "You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'."  
     for dict_message in st.session_state.messages:
         if dict_message["role"] == "user":
             string_dialogue += "User: " + dict_message["content"] + "\n\n"
@@ -73,16 +62,19 @@ def generate_llama2_response(prompt_input):
                                       "temperature": temperature, "top_p": top_p, "max_length": max_length, "repetition_penalty": 1})
     
     generated_response = " ".join(output)  # Convert response to string
-    
-    # Example Reference Response (Modify this based on expected responses)
-    reference_response = [["Hello", "how", "may", "I", "help", "you"], 
-                          ["Can", "I", "assist", "you", "with", "something"]]
 
-    # Tokenize response
-    generated_tokens = nltk.word_tokenize(generated_response)
+    # Example Reference Responses (Modify this based on expected responses)
+    reference_response = [
+        ["Hello", "how", "may", "I", "help", "you"], 
+        ["Can", "I", "assist", "you", "with", "something"]
+    ]
 
-    # Compute BLEU score
-    bleu_score = sentence_bleu(reference_response, generated_tokens)
+    # Compute BLEU Score Safely
+    if generated_response.strip():  # Ensure non-empty response
+        generated_tokens = nltk.word_tokenize(generated_response)
+        bleu_score = sentence_bleu(reference_response, generated_tokens, weights=(0.5, 0.5, 0, 0))
+    else:
+        bleu_score = 0.0  # Avoid errors with empty responses
 
     return generated_response, bleu_score
 
