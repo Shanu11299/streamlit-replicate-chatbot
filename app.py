@@ -12,6 +12,9 @@ if not os.path.exists(nltk_data_path):
 # Set the NLTK data path
 nltk.data.path.append(nltk_data_path)
 
+# Verify the path is added
+print("NLTK Data Paths:", nltk.data.path)
+
 # Manually check and download 'punkt' tokenizer
 try:
     nltk.data.find('tokenizers/punkt')
