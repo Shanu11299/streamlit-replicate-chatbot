@@ -2,17 +2,27 @@ import streamlit as st
 import replicate
 import os
 import nltk
-from nltk.translate.bleu_score import sentence_bleu
 
-# Ensure NLTK tokenizer is available
-nltk.download('punkt')
+# Ensure NLTK data directory exists
+nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
+if not os.path.exists(nltk_data_path):
+    os.makedirs(nltk_data_path)
+
+# Set the NLTK data path
+nltk.data.path.append(nltk_data_path)
+
+# Manually check and download 'punkt' tokenizer
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt', download_dir=nltk_data_path)
 
 # App title
-st.set_page_config(page_title="🦙💬 Llama 2 Chatbot with BLEU Score")
+st.set_page_config(page_title="🦙💬 Llama Newly 2 Chatbot")
 
 # Replicate Credentials
 with st.sidebar:
-    st.title('🦙💬 Llama 2 Chatbot with BLEU Score')
+    st.title('🦙💬 Llama new 2 Chatbot')
     if 'REPLICATE_API_TOKEN' in st.secrets:
         st.success('API key already provided!', icon='✅')
         replicate_api = st.secrets['REPLICATE_API_TOKEN']
@@ -49,34 +59,17 @@ def clear_chat_history():
     st.session_state.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
-# Function for generating LLaMA2 response and calculating BLEU score
+# Function for generating LLaMA2 response
 def generate_llama2_response(prompt_input):
-    string_dialogue = "You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'."  
+    string_dialogue = "You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'."
     for dict_message in st.session_state.messages:
         if dict_message["role"] == "user":
             string_dialogue += "User: " + dict_message["content"] + "\n\n"
         else:
             string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
-    
     output = replicate.run(llm, input={"prompt": f"{string_dialogue} {prompt_input} Assistant: ",
                                       "temperature": temperature, "top_p": top_p, "max_length": max_length, "repetition_penalty": 1})
-    
-    generated_response = " ".join(output)  # Convert response to string
-
-    # Example Reference Responses (Modify this based on expected responses)
-    reference_response = [
-        ["Hello", "how", "may", "I", "help", "you"], 
-        ["Can", "I", "assist", "you", "with", "something"]
-    ]
-
-    # Compute BLEU Score Safely
-    if generated_response.strip():  # Ensure non-empty response
-        generated_tokens = nltk.word_tokenize(generated_response)
-        bleu_score = sentence_bleu(reference_response, generated_tokens, weights=(0.5, 0.5, 0, 0))
-    else:
-        bleu_score = 0.0  # Avoid errors with empty responses
-
-    return generated_response, bleu_score
+    return output
 
 # User-provided prompt
 if prompt := st.chat_input(disabled=not replicate_api):
@@ -88,10 +81,12 @@ if prompt := st.chat_input(disabled=not replicate_api):
 if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response, bleu_score = generate_llama2_response(prompt)
+            response = generate_llama2_response(prompt)
             placeholder = st.empty()
-            placeholder.markdown(f"**Response:** {response}")
-            st.sidebar.write(f"🔹 **BLEU Score:** {bleu_score:.4f}")  # Display BLEU score in sidebar
-
-    message = {"role": "assistant", "content": response}
+            full_response = ''
+            for item in response:
+                full_response += item
+                placeholder.markdown(full_response)
+            placeholder.markdown(full_response)
+    message = {"role": "assistant", "content": full_response}
     st.session_state.messages.append(message)
