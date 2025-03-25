@@ -2,28 +2,19 @@ import streamlit as st
 import replicate
 import os
 import nltk
-from nltk.translate.bleu_score import sentence_bleu
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-# Ensure NLTK data directory exists
-nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
-if not os.path.exists(nltk_data_path):
-    os.makedirs(nltk_data_path)
-
-# Set the NLTK data path
-nltk.data.path.append(nltk_data_path)
-
-# Manually check and download 'punkt' tokenizer
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt', download_dir=nltk_data_path)
+# Ensure NLTK dependencies are available
+nltk.download('punkt')
+nltk.download('stopwords')
 
 # App title
-st.set_page_config(page_title="🦙💬 Llama Newly 2 Chatbot")
+st.set_page_config(page_title="🤙💬 Llama Newly 2 Chatbot")
 
 # Replicate Credentials
 with st.sidebar:
-    st.title('🦙💬 Llama new 2 Chatbot')
+    st.title('🤙💬 Llama new 2 Chatbot')
     if 'REPLICATE_API_TOKEN' in st.secrets:
         st.success('API key already provided!', icon='✅')
         replicate_api = st.secrets['REPLICATE_API_TOKEN']
@@ -36,15 +27,14 @@ with st.sidebar:
     os.environ['REPLICATE_API_TOKEN'] = replicate_api
 
     st.subheader('Models and parameters')
-    selected_model = st.selectbox('Choose a Llama2 model', ['Llama2-7B', 'Llama2-13B'], key='selected_model')
+    selected_model = st.sidebar.selectbox('Choose a Llama2 model', ['Llama2-7B', 'Llama2-13B'], key='selected_model')
     if selected_model == 'Llama2-7B':
         llm = 'a16z-infra/llama7b-v2-chat:4f0a4744c7295c024a1de15e1a63c880d3da035fa1f49bfd344fe076074c8eea'
-    else:
+    elif selected_model == 'Llama2-13B':
         llm = 'a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5'
-    
-    temperature = st.slider('temperature', min_value=0.01, max_value=5.0, value=0.1, step=0.01)
-    top_p = st.slider('top_p', min_value=0.01, max_value=1.0, value=0.9, step=0.01)
-    max_length = st.slider('max_length', min_value=32, max_value=128, value=120, step=8)
+    temperature = st.sidebar.slider('temperature', min_value=0.01, max_value=5.0, value=0.1, step=0.01)
+    top_p = st.sidebar.slider('top_p', min_value=0.01, max_value=1.0, value=0.9, step=0.01)
+    max_length = st.sidebar.slider('max_length', min_value=32, max_value=128, value=120, step=8)
     st.markdown('📖 Learn how to build this app in this [blog](https://blog.streamlit.io/how-to-build-a-llama-2-chatbot/)!')
 
 # Store LLM generated responses
@@ -60,31 +50,32 @@ def clear_chat_history():
     st.session_state.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
-# Function for generating LLaMA2 response and calculating BLEU score
-def generate_llama2_response(prompt_input):
-    string_dialogue = "You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. You only respond once as 'Assistant'."
+# Function to compute Cosine Similarity
+def compute_cosine_similarity(reference, generated):
+    vectorizer = TfidfVectorizer().fit_transform([reference, generated])
+    vectors = vectorizer.toarray()
+    cosine_sim = cosine_similarity(vectors)
+    return cosine_sim[0][1]  # Returns similarity score between reference and generated text
+
+# Function for generating LLaMA2 response
+def generate_llama2_response(prompt_input, reference_text):
+    string_dialogue = "You are a helpful assistant."
     for dict_message in st.session_state.messages:
         if dict_message["role"] == "user":
             string_dialogue += "User: " + dict_message["content"] + "\n\n"
         else:
             string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
     
-    # Get response from LLaMA2
-    output = replicate.run(llm, input={"prompt": f"{string_dialogue} {prompt_input} Assistant: ",
-                                      "temperature": temperature, "top_p": top_p, "max_length": max_length, "repetition_penalty": 1})
-    generated_response = " ".join(output)  # Convert output to string
+    output = replicate.run(
+        'a16z-infra/llama13b-v2-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5',
+        input={"prompt": f"{string_dialogue} {prompt_input} Assistant: ",
+               "temperature": temperature, "top_p": top_p, "max_length": max_length}
+    )
     
-    # Example Reference Response (Modify this based on expected responses)
-    reference_response = [["Hello", "how", "may", "I", "help", "you"], 
-                          ["Can", "I", "assist", "you", "with", "something"]]
-
-    # Tokenize both the generated response and the reference response
-    generated_tokens = nltk.word_tokenize(generated_response)
-
-    # Compute BLEU score
-    bleu_score = sentence_bleu(reference_response, generated_tokens)
-
-    return generated_response, bleu_score
+    generated_response = ''.join(output)
+    similarity_score = compute_cosine_similarity(reference_text, generated_response)
+    
+    return generated_response, similarity_score
 
 # User-provided prompt
 if prompt := st.chat_input(disabled=not replicate_api):
@@ -96,10 +87,11 @@ if prompt := st.chat_input(disabled=not replicate_api):
 if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response, bleu_score = generate_llama2_response(prompt)
+            reference_text = "Hello, how can I assist you today?"  # Modify based on expected response
+            response, similarity_score = generate_llama2_response(prompt, reference_text)
             placeholder = st.empty()
-            placeholder.markdown(f"**Response:** {response}")
-            st.sidebar.write(f"🔹 **BLEU Score:** {bleu_score:.4f}")  # Display BLEU score in sidebar
+            placeholder.markdown(f"**Chatbot:** {response}")
+            st.sidebar.markdown(f"**Cosine Similarity Score:** {similarity_score:.4f}")
 
     message = {"role": "assistant", "content": response}
     st.session_state.messages.append(message)
