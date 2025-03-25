@@ -1,5 +1,6 @@
 streamlit
 replicate
 nltk
-sklearn
+scikit-learn
+
 
